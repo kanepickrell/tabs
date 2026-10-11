@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tabs</title>
+<style>
+  body { font: 13px system-ui, sans-serif; width: 16rem; margin: 0; padding: .8rem; }
+  .big { font-size: 1.6rem; font-weight: 600; }
+  .row { color: #555; margin-top: .2rem; }
+  .err { color: #c00; margin-top: .5rem; word-break: break-word; }
+  button, a { font: inherit; }
+  .actions { margin-top: .8rem; display: flex; gap: .5rem; align-items: center; }
+</style>
+<div class="big" id="count">—</div>
+<div class="row" id="device"></div>
+<div class="row" id="sync"></div>
+<div class="row" id="closed"></div>
+<div class="err" id="err"></div>
+<div class="actions">
+  <button id="now">Sync now</button>
+  <a href="#" id="opts">Settings</a>
+</div>
+<script src="popup.js"></script>

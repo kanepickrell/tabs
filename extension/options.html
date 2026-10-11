@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tabs — settings</title>
+<style>
+  body { font: 14px system-ui, sans-serif; max-width: 34rem; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.1rem; }
+  label { display: block; margin: 1.1rem 0 .3rem; font-weight: 600; }
+  input { width: 100%; padding: .5rem; font: inherit; box-sizing: border-box; }
+  .hint { color: #666; font-size: .85rem; margin-top: .3rem; }
+  button { margin-top: 1.4rem; padding: .5rem 1rem; font: inherit; }
+  #saved { color: #0a7; margin-left: .6rem; }
+  code { background: #f2f2f2; padding: .1rem .3rem; }
+</style>
+
+<h1>Tabs — settings</h1>
+
+<label for="dbUrl">Realtime Database URL</label>
+<input id="dbUrl" placeholder="https://tabs-xxxx-default-rtdb.firebaseio.com">
+<div class="hint">From the Firebase console, Realtime Database page. No trailing slash needed.</div>
+
+<label for="spaceId">Space ID (shared secret)</label>
+<input id="spaceId" placeholder="click Generate">
+<button type="button" id="gen">Generate</button>
+<div class="hint">Anything that knows this string can read your tab list, so keep it long.
+  Paste the same value into the Android app.</div>
+
+<label for="deviceName">This device's name</label>
+<input id="deviceName" placeholder="work laptop">
+
+<button type="button" id="save">Save</button><span id="saved"></span>
+
+<script src="options.js"></script>
