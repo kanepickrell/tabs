@@ -20,8 +20,14 @@ const PER_TICK = 2;
 const MIN_CHARS = 400;
 const MIN_WORDS = 250;
 
-// Bump when the brief shape changes; older briefs are then rewritten.
+// Stamped on every record so the shape a brief was written in is knowable.
 const BRIEF_VERSION = 3;
+
+// Whether a shape change should rewrite briefs that already exist. Off: a
+// bumped version only affects tabs briefed from now on, and every page already
+// briefed keeps what it has. Rewriting the backlog costs a full sweep's worth
+// of API calls, which is rarely what you want for a wording change.
+const REISSUE_OLD_BRIEFS = false;
 
 // Pages that are consoles, inboxes and account screens, not reading. Briefing
 // one sends your own dashboard to the API and then stores a description of it
@@ -288,7 +294,7 @@ export async function sweepBriefs(cfg, apiKey, path) {
   const existing = (await fetch(path(cfg, "summaries")).then((r) => r.json())) || {};
   const done = new Set(
     Object.entries(existing)
-      .filter(([, record]) => record?.v === BRIEF_VERSION)
+      .filter(([, record]) => !REISSUE_OLD_BRIEFS || record?.v === BRIEF_VERSION)
       .map(([hash]) => hash)
   );
   const { briefBlocklist = "" } = await chrome.storage.local.get("briefBlocklist");

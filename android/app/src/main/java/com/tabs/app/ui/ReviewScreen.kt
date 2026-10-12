@@ -510,7 +510,9 @@ private fun CardFace(
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 25.sp,
-                        maxLines = 4,
+                        // Six lines holds a 22-word sentence at this size with
+                        // room for the longer ones written before the cap.
+                        maxLines = 6,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
