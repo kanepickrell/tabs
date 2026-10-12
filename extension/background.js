@@ -168,17 +168,42 @@ async function tick() {
 async function briefTick() {
   const cfg = await getConfig();
   if (!cfg) return;
+
   const { anthropicKey, briefsEnabled } = await chrome.storage.local.get([
     "anthropicKey",
     "briefsEnabled",
   ]);
-  if (!anthropicKey || briefsEnabled === false) return;
+
+  // A heartbeat, so why briefs are not happening is answerable without opening
+  // the service worker console. The key itself is never included - only
+  // whether one is present.
+  const beat = {
+    at: Date.now(),
+    hasKey: Boolean(anthropicKey),
+    enabled: briefsEnabled !== false,
+  };
+
+  if (!anthropicKey || briefsEnabled === false) {
+    await reportBriefState({ ...beat, state: "off" });
+    return;
+  }
 
   try {
     const written = await sweepBriefs(cfg, anthropicKey, path);
-    if (written) await setStatus({ briefs: written, briefedAt: Date.now(), briefError: null });
+    await setStatus({ briefs: written, briefedAt: Date.now(), briefError: null });
+    await reportBriefState({ ...beat, state: "ran", written });
   } catch (err) {
-    await setStatus({ briefError: String(err.message || err).slice(0, 200) });
+    const message = String(err.message || err).slice(0, 300);
+    await setStatus({ briefError: message });
+    await reportBriefState({ ...beat, state: "error", error: message });
+  }
+
+  async function reportBriefState(body) {
+    await fetch(path(cfg, "devices", cfg.deviceId, "briefState"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
   }
 }
 
@@ -218,5 +243,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
   if (msg === "sync-now") {
     tick().then(() => respond({ ok: true }));
     return true; // async response
+  }
+  if (msg === "brief-now") {
+    briefTick().then(() => respond({ ok: true }));
+    return true;
   }
 });

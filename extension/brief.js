@@ -18,6 +18,56 @@ const MAX_CHARS = 24000;
 // twenty requests at once.
 const PER_TICK = 2;
 const MIN_CHARS = 400;
+const MIN_WORDS = 250;
+
+// Pages that are consoles, inboxes and account screens, not reading. Briefing
+// one sends your own dashboard to the API and then stores a description of it
+// in a database whose only credential is the space id. The first run of this
+// feature briefed an API-keys page, balance and all, which is exactly the
+// mistake this list exists to stop.
+const NEVER_BRIEF = [
+  /(^|\.)console\./i,
+  /(^|\.)dashboard\./i,
+  /(^|\.)admin\./i,
+  /(^|\.)accounts?\./i,
+  /(^|\.)login\./i,
+  /(^|\.)billing\./i,
+  /(^|\.)mail\.google\.com$/i,
+  /(^|\.)messages\.google\.com$/i,
+  /(^|\.)outlook\./i,
+  /(^|\.)slack\.com$/i,
+  /(^|\.)web\.whatsapp\.com$/i,
+  /(^|\.)anthropic\.com$/i,
+  // Your own conversations with an assistant are not reading material, and
+  // they are often about private work.
+  /(^|\.)claude\.ai$/i,
+  /(^|\.)chatgpt\.com$/i,
+  /(^|\.)gemini\.google\.com$/i,
+  /(^|\.)notion\.so$/i,
+  /(^|\.)calendar\.google\.com$/i,
+  /(^|\.)drive\.google\.com$/i,
+  /(^|\.)docs\.google\.com$/i,
+  /(^|\.)localhost$/i,
+  /^127\.0\.0\.1$/,
+  /^192\.168\./,
+];
+
+// Path fragments that mean "your account", wherever they appear.
+const NEVER_BRIEF_PATHS =
+  /\/(settings|account|billing|invoice|password|checkout|admin|api[-_]?keys?)(\/|$|\?)/i;
+
+function isPrivatePage(rawUrl, extraHosts) {
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return true;
+  }
+  const host = url.hostname;
+  if (NEVER_BRIEF.some((pattern) => pattern.test(host))) return true;
+  if (NEVER_BRIEF_PATHS.test(url.pathname)) return true;
+  return extraHosts.some((h) => h && (host === h || host.endsWith(`.${h}`)));
+}
 
 const BRIEF_TOOL = {
   name: "save_brief",
@@ -110,9 +160,21 @@ function extractPageText() {
   const parts = [];
   let node;
   while ((node = walker.nextNode())) parts.push(node.nodeValue.trim());
+  const text = parts.join(" ").replace(/\s{2,}/g, " ").trim();
+
+  // A console or inbox is mostly links and controls; an article is mostly
+  // prose. Link density separates the two better than length alone.
+  const linkChars = [...root.querySelectorAll("a")]
+    .reduce((sum, a) => sum + (a.textContent || "").trim().length, 0);
+
   return {
-    text: parts.join(" ").replace(/\s{2,}/g, " ").trim(),
+    text,
     title: document.title,
+    words: text ? text.split(/\s+/).length : 0,
+    linkDensity: text.length ? linkChars / text.length : 1,
+    declaredArticle:
+      Boolean(document.querySelector("article")) ||
+      document.querySelector('meta[property="og:type"]')?.content === "article",
   };
 }
 
@@ -172,6 +234,11 @@ async function askClaude(apiKey, { url, title, text }) {
 export async function sweepBriefs(cfg, apiKey, path) {
   const existing = await fetch(path(cfg, "summaries")).then((r) => r.json());
   const done = new Set(Object.keys(existing || {}));
+  const { briefBlocklist = "" } = await chrome.storage.local.get("briefBlocklist");
+  const extraHosts = briefBlocklist
+    .split(/[\s,]+/)
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
 
   const tabs = await chrome.tabs.query({ windowType: "normal" });
   let written = 0;
@@ -184,11 +251,23 @@ export async function sweepBriefs(cfg, apiKey, path) {
     const hash = await hashUrl(tab.url);
     if (done.has(hash)) continue;
 
+    if (isPrivatePage(tab.url, extraHosts)) {
+      // Recorded so it is not reconsidered every minute, and so the reason is
+      // visible. Nothing about the page is sent anywhere.
+      await store(cfg, path, hash, { status: "skipped", reason: "private page" });
+      continue;
+    }
+
     try {
       const page = await readPage(tab.id);
-      if (page.text.length < MIN_CHARS) {
-        // Not an article - a login wall, an app shell, a blank new tab.
+      if (page.text.length < MIN_CHARS || page.words < MIN_WORDS) {
+        // A login wall, an app shell, a blank new tab.
         await store(cfg, path, hash, { status: "skipped", reason: "too little text" });
+        continue;
+      }
+      if (!page.declaredArticle && page.linkDensity > 0.5) {
+        // Mostly navigation: a feed, a search page, a console.
+        await store(cfg, path, hash, { status: "skipped", reason: "not an article" });
         continue;
       }
 

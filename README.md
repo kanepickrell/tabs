@@ -100,6 +100,17 @@ Model is `claude-opus-5` with `claude-opus-4-8` as a refusal fallback, at
 medium effort — roughly $0.04-0.05 per page at ~6k input tokens. Both the model
 and the effort are constants at the top of `extension/brief.js`.
 
+**Private pages are never briefed.** Consoles, dashboards, admin screens,
+webmail, assistant chats (claude.ai and friends), Google Docs/Drive/Calendar,
+localhost and LAN addresses, and any path under `/settings`, `/account`,
+`/billing` or `/api-keys` are skipped before a single byte is sent. Pages that
+are mostly links rather than prose are skipped too. Add your own hosts in the
+extension's settings.
+
+This list exists because the first run briefed an API-keys page — balance,
+spend and key names — and wrote a description of it into a database whose only
+credential is the space id. Assume the list is incomplete and add to it.
+
 **This needs broad host access.** Reading article text means `chrome.scripting`
 has to run in the page, which requires permission for all sites. Chrome will
 ask you to approve that on reload.

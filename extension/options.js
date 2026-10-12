@@ -1,7 +1,7 @@
 // Shared across every machine signed into this Chrome profile.
 const SHARED = ["dbUrl", "spaceId"];
 // Per-machine: a second computer must not inherit this one's name.
-const LOCAL = ["deviceName", "anthropicKey"];
+const LOCAL = ["deviceName", "anthropicKey", "briefBlocklist"];
 // Read alongside LOCAL but handled separately: it is a checkbox, not a field.
 const LOCAL_FLAGS = ["briefsEnabled"];
 const el = (id) => document.getElementById(id);

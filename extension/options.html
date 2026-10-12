@@ -46,6 +46,14 @@
   Write briefs for new tabs
 </label>
 
+<label for="briefBlocklist">Never brief these sites</label>
+<input id="briefBlocklist" placeholder="bank.com, intranet.work.com">
+<div class="hint">
+  Comma separated, subdomains included. Consoles, dashboards, admin pages,
+  webmail and anything under /settings, /account or /billing are already
+  skipped — add anything else you would not want described into the database.
+</div>
+
 <button type="button" id="save">Save</button><span id="saved"></span>
 
 <script src="options.js"></script>

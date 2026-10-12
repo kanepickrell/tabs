@@ -19,13 +19,24 @@ async function render() {
   el("closed").textContent = status.lastClosedCount
     ? `closed ${status.lastClosedCount} from phone ${ago(status.lastClosed)}`
     : "";
-  el("err").textContent = status.error || "";
+  el("briefs").textContent = status.briefedAt
+    ? `briefs: ${status.briefs ?? 0} written ${ago(status.briefedAt)}`
+    : "briefs: none yet";
+  el("err").textContent = [status.error, status.briefError].filter(Boolean).join(" / ");
 }
 
 el("now").addEventListener("click", async () => {
   el("now").disabled = true;
   await chrome.runtime.sendMessage("sync-now");
   el("now").disabled = false;
+  render();
+});
+el("brief").addEventListener("click", async () => {
+  el("brief").disabled = true;
+  el("brief").textContent = "Working...";
+  await chrome.runtime.sendMessage("brief-now");
+  el("brief").disabled = false;
+  el("brief").textContent = "Brief now";
   render();
 });
 el("opts").addEventListener("click", (e) => {
