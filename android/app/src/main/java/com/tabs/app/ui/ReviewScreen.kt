@@ -10,6 +10,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -469,99 +471,106 @@ private fun CardFace(
                 .fillMaxSize()
                 .padding(26.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Monogram(tab.host)
-                Spacer(Modifier.size(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        tab.host,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        listOfNotNull(
-                            ageLabel(tab.ageDays),
-                            tab.brief?.readingMinutes?.takeIf { it > 0 }?.let { "$it min read" },
-                        ).joinToString(" · "),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            Spacer(Modifier.size(22.dp))
-
-            Text(
-                tab.brief?.shortTitle?.takeIf { it.isNotBlank() } ?: tab.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 38.sp,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            tab.brief?.let { brief ->
-                if (brief.oneLiner.isNotBlank()) {
-                    Spacer(Modifier.size(18.dp))
-                    Text(
-                        brief.oneLiner,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 25.sp,
-                        // Six lines holds a 22-word sentence at this size with
-                        // room for the longer ones written before the cap.
-                        maxLines = 6,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            tab.brief?.question?.takeIf { it.isNotBlank() }?.let { question ->
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(16.dp)
-                ) {
-                    Column {
+            // Scrollable, so a long title, sentence or question is never
+            // clipped. The swipe still works: verticalScroll only claims
+            // vertical drags and the card's detector only claims horizontal
+            // ones, so the two gestures do not compete.
+            //
+            // The footer stays outside this column on purpose. Modifier.weight
+            // needs a bounded height, and a scrollable column measures its
+            // children with an infinite one.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Monogram(tab.host)
+                    Spacer(Modifier.size(12.dp))
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            "BEFORE YOU READ",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        Text(
-                            question,
-                            style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = 22.sp,
-                            maxLines = 6,
+                            tab.host,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            listOfNotNull(
+                                ageLabel(tab.ageDays),
+                                tab.brief?.readingMinutes?.takeIf { it > 0 }
+                                    ?.let { "$it min read" },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                Spacer(Modifier.size(14.dp))
+
+                Spacer(Modifier.size(22.dp))
+
+                Text(
+                    tab.brief?.shortTitle?.takeIf { it.isNotBlank() } ?: tab.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 38.sp,
+                )
+
+                tab.brief?.let { brief ->
+                    if (brief.oneLiner.isNotBlank()) {
+                        Spacer(Modifier.size(18.dp))
+                        Text(
+                            brief.oneLiner,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 25.sp,
+                        )
+                    }
+
+                    brief.question.takeIf { it.isNotBlank() }?.let { question ->
+                        Spacer(Modifier.size(22.dp))
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(16.dp)
+                        ) {
+                            Column {
+                                Text(
+                                    "BEFORE YOU READ",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp,
+                                )
+                                Spacer(Modifier.size(8.dp))
+                                Text(
+                                    question,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    lineHeight = 22.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (siblings > 0) {
+                    Spacer(Modifier.size(14.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = CircleShape,
+                    ) {
+                        Text(
+                            "$siblings more from ${tab.host}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
+                }
             }
 
-            if (siblings > 0) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = CircleShape,
-                ) {
-                    Text(
-                        "$siblings more from ${tab.host}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
-                Spacer(Modifier.size(12.dp))
-            }
+            Spacer(Modifier.size(14.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
