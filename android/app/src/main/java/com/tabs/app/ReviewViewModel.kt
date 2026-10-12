@@ -19,7 +19,12 @@ enum class DeckOrder(val label: String) {
     SITE("By site"),
 }
 
+enum class Screen { DECK, ARCHIVE }
+
 data class ReviewState(
+    val screen: Screen = Screen.DECK,
+    val archive: List<Archived> = emptyList(),
+    val archiveLoading: Boolean = false,
     val tabs: List<Tab> = emptyList(),
     val order: DeckOrder = DeckOrder.OLDEST,
     val loading: Boolean = false,
@@ -56,6 +61,36 @@ class ReviewViewModel : ViewModel() {
         }
     }
 
+    fun show(screen: Screen) {
+        state = state.copy(screen = screen)
+        // The archive only changes when this phone closes something, so it is
+        // fetched on demand rather than kept live.
+        if (screen == Screen.ARCHIVE && state.archive.isEmpty()) loadArchive()
+    }
+
+    fun loadArchive() {
+        if (!store.configured) return
+        state = state.copy(archiveLoading = true)
+        viewModelScope.launch {
+            runCatching { store.archive() }
+                .onSuccess { state = state.copy(archive = it, archiveLoading = false) }
+                .onFailure { state = state.copy(archiveLoading = false, error = it.message) }
+        }
+    }
+
+    /** Drop a URL from the archive for good. Nothing else in the app deletes. */
+    fun forget(archived: Archived) {
+        state = state.copy(archive = state.archive.filterNot { it.hash == archived.hash })
+        viewModelScope.launch {
+            runCatching { store.forget(archived.hash) }.onFailure { failure ->
+                state = state.copy(
+                    archive = (state.archive + archived).sortedByDescending { it.closedAt },
+                    error = "Couldn't forget: ${failure.message}",
+                )
+            }
+        }
+    }
+
     fun setOrder(order: DeckOrder) {
         state = state.copy(order = order, tabs = arrange(pile, order))
     }
@@ -83,14 +118,16 @@ class ReviewViewModel : ViewModel() {
             closedThisSession = state.closedThisSession + 1,
         )
         viewModelScope.launch {
-            runCatching { store.close(tab) }.onFailure { failure ->
-                pile = pile + tab
-                state = state.copy(
-                    tabs = arrange(pile, state.order),
-                    closedThisSession = (state.closedThisSession - 1).coerceAtLeast(0),
-                    error = "Couldn't close: ${failure.message}",
-                )
-            }
+            runCatching { store.close(tab) }
+                .onSuccess { loadArchive() }
+                .onFailure { failure ->
+                    pile = pile + tab
+                    state = state.copy(
+                        tabs = arrange(pile, state.order),
+                        closedThisSession = (state.closedThisSession - 1).coerceAtLeast(0),
+                        error = "Couldn't close: ${failure.message}",
+                    )
+                }
         }
     }
 

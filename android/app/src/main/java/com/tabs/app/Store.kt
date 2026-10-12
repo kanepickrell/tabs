@@ -29,15 +29,26 @@ private data class RemoteDevice(
     val tabs: Map<String, RemoteTab> = emptyMap(),
 )
 
+// Field names match the Claude tool schema the extension writes.
+@Serializable
+private data class BriefRecord(
+    val status: String = "",
+    val one_liner: String = "",
+    val key_points: List<String> = emptyList(),
+    val questions: List<String> = emptyList(),
+    val reading_minutes: Int = 0,
+    val is_worth_reading: Boolean = true,
+)
+
 @Serializable
 private data class CloseCommand(val type: String = "close", val url: String)
 
 @Serializable
-private data class ArchivedTab(
+private data class ArchiveRecord(
     val url: String,
-    val title: String,
-    val firstSeen: Long,
-    val closedAt: Long,
+    val title: String = "",
+    val firstSeen: Long = 0L,
+    val closedAt: Long = 0L,
 )
 
 // --- what the UI works with -------------------------------------------------
@@ -49,12 +60,33 @@ data class Tab(
     val url: String,
     val title: String,
     val firstSeen: Long,
+    val brief: Brief? = null,
 ) {
     val host: String
         get() = runCatching { URI(url).host?.removePrefix("www.") }.getOrNull() ?: url
 
     val ageDays: Long
         get() = (System.currentTimeMillis() - firstSeen) / 86_400_000L
+}
+
+/** What Claude made of a page, written by the extension. */
+data class Brief(
+    val oneLiner: String,
+    val keyPoints: List<String>,
+    val questions: List<String>,
+    val readingMinutes: Int,
+    val worthReading: Boolean,
+)
+
+/** A tab that was closed from the phone. The URL is kept forever. */
+data class Archived(
+    val hash: String,
+    val url: String,
+    val title: String,
+    val closedAt: Long,
+) {
+    val host: String
+        get() = runCatching { URI(url).host?.removePrefix("www.") }.getOrNull() ?: url
 }
 
 /**
@@ -87,6 +119,8 @@ class Store(dbUrl: String, private val spaceId: String) {
         val text = execute(Request.Builder().url(endpoint("devices")).get().build())
         if (text.isBlank() || text == "null") return@withContext emptyList()
 
+        val briefs = briefs()
+
         json.decodeFromString<Map<String, RemoteDevice>>(text)
             .flatMap { (deviceId, device) ->
                 device.tabs.map { (hash, tab) ->
@@ -97,10 +131,59 @@ class Store(dbUrl: String, private val spaceId: String) {
                         url = tab.url,
                         title = tab.title.ifBlank { tab.url },
                         firstSeen = tab.firstSeen,
+                        brief = briefs[hash],
                     )
                 }
             }
             .sortedBy { it.firstSeen } // oldest first: that is the tab debt
+    }
+
+    /**
+     * Briefs are keyed by the same URL hash as tabs, and live outside the
+     * per-device tree so one page briefed on the laptop is already briefed
+     * everywhere. A missing or failed entry just means no brief yet.
+     */
+    private fun briefs(): Map<String, Brief> {
+        val text = runCatching {
+            execute(Request.Builder().url(endpoint("summaries")).get().build())
+        }.getOrNull().orEmpty()
+        if (text.isBlank() || text == "null") return emptyMap()
+
+        return runCatching {
+            json.decodeFromString<Map<String, BriefRecord>>(text)
+                .filterValues { it.status == "ok" && it.one_liner.isNotBlank() }
+                .mapValues { (_, record) ->
+                    Brief(
+                        oneLiner = record.one_liner,
+                        keyPoints = record.key_points,
+                        questions = record.questions,
+                        readingMinutes = record.reading_minutes,
+                        worthReading = record.is_worth_reading,
+                    )
+                }
+        }.getOrDefault(emptyMap())
+    }
+
+    suspend fun archive(): List<Archived> = withContext(Dispatchers.IO) {
+        val text = execute(Request.Builder().url(endpoint("archive")).get().build())
+        if (text.isBlank() || text == "null") return@withContext emptyList()
+
+        json.decodeFromString<Map<String, ArchiveRecord>>(text)
+            .map { (hash, record) ->
+                Archived(
+                    hash = hash,
+                    url = record.url,
+                    title = record.title.ifBlank { record.url },
+                    closedAt = record.closedAt,
+                )
+            }
+            .sortedByDescending { it.closedAt } // most recently closed first
+    }
+
+    /** Permanently forget a closed tab. The only destructive action in the app. */
+    suspend fun forget(hash: String) = withContext(Dispatchers.IO) {
+        execute(Request.Builder().url(endpoint("archive", hash)).delete().build())
+        Unit
     }
 
     /**
@@ -109,7 +192,7 @@ class Store(dbUrl: String, private val spaceId: String) {
      * anyone from closing a tab in the first place.
      */
     suspend fun close(tab: Tab) = withContext(Dispatchers.IO) {
-        val archived = ArchivedTab(
+        val archived = ArchiveRecord(
             url = tab.url,
             title = tab.title,
             firstSeen = tab.firstSeen,

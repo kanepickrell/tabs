@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
@@ -60,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tabs.app.DeckOrder
 import com.tabs.app.ReviewViewModel
+import com.tabs.app.Screen
 import com.tabs.app.Tab
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -89,14 +92,24 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                 remaining = state.tabs.size,
                 closed = state.closedThisSession,
                 kept = state.keptThisSession,
-                onRefresh = viewModel::refresh,
+                onRefresh = {
+                    if (state.screen == Screen.DECK) viewModel.refresh() else viewModel.loadArchive()
+                },
             )
 
             if (state.configured) {
+                ScreenTabs(
+                    current = state.screen,
+                    archiveCount = state.archive.size,
+                    onPick = viewModel::show,
+                )
+            }
+
+            if (state.configured && state.screen == Screen.DECK) {
                 OrderChips(current = state.order, onPick = viewModel::setOrder)
             }
 
-            if (state.loading) {
+            if (state.loading || state.archiveLoading) {
                 LinearProgressIndicator(
                     Modifier
                         .fillMaxWidth()
@@ -115,6 +128,15 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
 
             when {
                 !state.configured -> Notice(NOT_CONFIGURED)
+
+                state.screen == Screen.ARCHIVE -> ArchiveList(
+                    archive = state.archive,
+                    onOpen = { entry ->
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.url)))
+                    },
+                    onForget = viewModel::forget,
+                )
+
                 state.tabs.isEmpty() && !state.loading -> Notice(ALL_DONE)
                 else -> Deck(
                     tabs = state.tabs,
@@ -157,6 +179,42 @@ private fun Header(remaining: Int, closed: Int, kept: Int, onRefresh: () -> Unit
             }
         }
         TextButton(onClick = onRefresh) { Text("Refresh") }
+    }
+}
+
+@Composable
+private fun ScreenTabs(current: Screen, archiveCount: Int, onPick: (Screen) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        ScreenTab("Deck", current == Screen.DECK) { onPick(Screen.DECK) }
+        ScreenTab(
+            if (archiveCount > 0) "Closed ($archiveCount)" else "Closed",
+            current == Screen.ARCHIVE,
+        ) { onPick(Screen.ARCHIVE) }
+    }
+}
+
+@Composable
+private fun ScreenTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(Modifier.clickable(onClick = onClick)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box(
+            Modifier
+                .padding(top = 5.dp)
+                .height(2.dp)
+                .width(if (selected) 26.dp else 0.dp)
+                .background(MaterialTheme.colorScheme.primary)
+        )
     }
 }
 
@@ -423,23 +481,89 @@ private fun CardFace(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        ageLabel(tab.ageDays),
+                        listOfNotNull(
+                            ageLabel(tab.ageDays),
+                            tab.brief?.readingMinutes?.takeIf { it > 0 }?.let { "$it min read" },
+                        ).joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            Spacer(Modifier.size(28.dp))
+            Spacer(Modifier.size(22.dp))
 
             Text(
                 tab.title,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 36.sp,
-                maxLines = 8,
+                lineHeight = 32.sp,
+                maxLines = if (tab.brief == null) 7 else 3,
                 overflow = TextOverflow.Ellipsis,
             )
+
+            tab.brief?.let { brief ->
+                Spacer(Modifier.size(14.dp))
+                Text(
+                    brief.oneLiner,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 21.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                if (brief.keyPoints.isNotEmpty()) {
+                    Spacer(Modifier.size(16.dp))
+                    brief.keyPoints.take(3).forEach { point ->
+                        Row(Modifier.padding(bottom = 7.dp)) {
+                            Text(
+                                "—",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.size(9.dp))
+                            Text(
+                                point,
+                                style = MaterialTheme.typography.bodySmall,
+                                lineHeight = 19.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+
+                // The part that is actually hard to get anywhere else: something
+                // worth saying about the page, not a summary of it.
+                brief.questions.firstOrNull()?.let { question ->
+                    Spacer(Modifier.size(10.dp))
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(14.dp)
+                    ) {
+                        Column {
+                            Text(
+                                "WORTH RAISING",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                            )
+                            Spacer(Modifier.size(6.dp))
+                            Text(
+                                question,
+                                style = MaterialTheme.typography.bodySmall,
+                                lineHeight = 19.sp,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.weight(1f))
 
@@ -514,7 +638,7 @@ private fun Stamp(drag: MutableFloatState, commitAt: Float, left: Boolean) {
 }
 
 @Composable
-private fun Monogram(host: String) {
+internal fun Monogram(host: String) {
     val letter = host.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() ?: '*'
     // Stable per-site colour, so a site you see often becomes recognisable
     // before you have read a word of the card.

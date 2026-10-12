@@ -32,6 +32,26 @@ already filled in; the device **name** is deliberately local, so each machine
 labels its own cards. Unpacked extensions are not themselves synced by Chrome,
 so the folder has to exist on each machine.
 
+## Briefs (optional)
+
+Paste an Anthropic API key into the settings page and the extension starts
+writing a brief for each new tab — triage line, key points, questions worth
+raising, reading time — into `summaries/<urlHash>`. Leave the key blank, or
+untick "Write briefs for new tabs", and no request is ever made.
+
+The key lives in `chrome.storage.local`: never synced to other machines, never
+written to the database, never sent to the phone.
+
+Requires a build step, because an MV3 service worker cannot resolve bare npm
+specifiers:
+
+```bash
+cd extension && npm install && npm run build   # -> vendor/anthropic.bundle.js
+```
+
+The bundle is committed, so loading the folder works without running npm. Only
+rebuild after changing the SDK version.
+
 ## Database rules (paste into Realtime Database → Rules)
 
 ```json

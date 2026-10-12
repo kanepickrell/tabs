@@ -14,6 +14,10 @@ No summaries, no AI, no cards.
 | `android/` | Compose app. Swipe left closes the tab on the desktop. |
 | `tools/phone.mjs` | CLI stand-in for the phone, for testing before the app is installed. |
 
+The extension also writes **briefs** — a triage line, key points and a couple of
+questions worth raising — using the Claude API. Optional: with no key set,
+nothing is ever sent to Anthropic and everything else works unchanged.
+
 There is no server. Firebase Realtime Database is used as a dumb JSON store
 over plain HTTPS — no Firebase SDK on either side, no `google-services.json`,
 no Gradle plugin.
@@ -72,13 +76,40 @@ cd android && ./gradlew :app:assembleDebug
   site so one topic's tabs arrive as a single run.
 - The desktop catches up within about a minute (MV3 alarm floor), not instantly.
 
+## Briefs
+
+Set an Anthropic API key in the extension's settings and each new tab gets a
+brief: one triage sentence, three to five concrete key points, a question or
+two worth raising with someone, and an estimated reading time. They appear on
+the card, so the decision to read or close is made with something better than
+a title.
+
+Why the extension does this rather than the phone:
+
+- It is inside your logged-in session, so it reads paywalled and authenticated
+  pages the phone could never fetch.
+- The key stays in `chrome.storage.local` on your own machine instead of being
+  compiled into an APK. It is never synced, never written to the database and
+  never sent to the phone.
+
+Briefs are keyed by the same URL hash as tabs and stored outside the per-device
+tree, so a page briefed on one machine is already briefed on every other.
+Two per minute, so a fresh install does not fire twenty requests at once.
+
+Model is `claude-opus-5` with `claude-opus-4-8` as a refusal fallback, at
+medium effort — roughly $0.04-0.05 per page at ~6k input tokens. Both the model
+and the effort are constants at the top of `extension/brief.js`.
+
+**This needs broad host access.** Reading article text means `chrome.scripting`
+has to run in the page, which requires permission for all sites. Chrome will
+ask you to approve that on reload.
+
 ## Not built yet
 
 Swipe-right "keep" only lasts the session; it should resurface the tab in a few
-days. No page-text extraction, no summaries, no reading-time estimate, no time
-budget filter, no daily cap, no conversation prompts, no TTS, no share-sheet
-intake (the only route for tabs opened on the phone itself). All of it layers on
-top of this loop.
+days. No time budget filter ("I have 7 minutes"), no daily cap, no TTS, no
+AI topic clustering beyond grouping by hostname, and no share-sheet intake —
+which is the only possible route for tabs opened on the phone itself.
 
 ## Security posture
 

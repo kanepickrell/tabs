@@ -8,6 +8,9 @@
 // hash of its URL. That also dedupes the same page open in several windows,
 // and lets the phone's close command find the tab again later.
 
+import { hashUrl } from "./hash.js";
+import { sweepBriefs } from "./brief.js";
+
 const ALARM_NAME = "tabs-sync";
 const PERIOD_MINUTES = 1;
 
@@ -60,14 +63,6 @@ async function setStatus(patch) {
 // chrome://, extension pages, about:blank and the like are never reading.
 function isReadable(url) {
   return /^https?:/i.test(url);
-}
-
-async function hashUrl(url) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
-  return [...new Uint8Array(digest)]
-    .slice(0, 10)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 async function collectTabs() {
@@ -165,6 +160,26 @@ async function pollCommands() {
 async function tick() {
   await pushTabs();
   await pollCommands();
+  await briefTick();
+}
+
+// Briefs are optional: with no key stored, everything else works exactly as
+// before and nothing is ever sent to Anthropic.
+async function briefTick() {
+  const cfg = await getConfig();
+  if (!cfg) return;
+  const { anthropicKey, briefsEnabled } = await chrome.storage.local.get([
+    "anthropicKey",
+    "briefsEnabled",
+  ]);
+  if (!anthropicKey || briefsEnabled === false) return;
+
+  try {
+    const written = await sweepBriefs(cfg, anthropicKey, path);
+    if (written) await setStatus({ briefs: written, briefedAt: Date.now(), briefError: null });
+  } catch (err) {
+    await setStatus({ briefError: String(err.message || err).slice(0, 200) });
+  }
 }
 
 // --------------------------------------------------------------- wiring -----

@@ -27,6 +27,25 @@
 <label for="deviceName">This device's name</label>
 <input id="deviceName" placeholder="work laptop">
 
+<h1 style="margin-top:2rem">Briefs (optional)</h1>
+<p class="hint" style="margin:0">
+  With a key set, Claude reads each page in this browser and writes a one-line
+  triage summary, key points and a few questions worth raising. Leave it blank
+  and nothing is ever sent to Anthropic.
+</p>
+
+<label for="anthropicKey">Anthropic API key</label>
+<input id="anthropicKey" type="password" placeholder="sk-ant-...">
+<div class="hint">
+  Stored locally in this browser only — never synced, never written to the
+  database, never sent to the phone. Get one at console.anthropic.com.
+</div>
+
+<label style="font-weight:400;display:flex;gap:.5rem;align-items:center;margin-top:1rem">
+  <input type="checkbox" id="briefsEnabled" style="width:auto" checked>
+  Write briefs for new tabs
+</label>
+
 <button type="button" id="save">Save</button><span id="saved"></span>
 
 <script src="options.js"></script>
