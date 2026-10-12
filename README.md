@@ -100,6 +100,14 @@ Model is `claude-opus-5` with `claude-opus-4-8` as a refusal fallback, at
 medium effort — roughly $0.04-0.05 per page at ~6k input tokens. Both the model
 and the effort are constants at the top of `extension/brief.js`.
 
+A brief is a short title, one sentence of at most 22 words, and one question
+worth turning over before the page is open. Nothing else: bullets invite
+reading the card instead of the page.
+
+PDFs have no DOM for Chrome to expose, so they are skipped — except arXiv,
+which always has a text landing page at a predictable URL, so `/pdf/<id>`
+falls back to the abstract from `/abs/<id>`.
+
 **Private pages are never briefed.** Consoles, dashboards, admin screens,
 webmail, assistant chats (claude.ai and friends), Google Docs/Drive/Calendar,
 localhost and LAN addresses, and any path under `/settings`, `/account`,

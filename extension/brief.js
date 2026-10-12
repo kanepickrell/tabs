@@ -21,7 +21,7 @@ const MIN_CHARS = 400;
 const MIN_WORDS = 250;
 
 // Bump when the brief shape changes; older briefs are then rewritten.
-const BRIEF_VERSION = 2;
+const BRIEF_VERSION = 3;
 
 // Pages that are consoles, inboxes and account screens, not reading. Briefing
 // one sends your own dashboard to the API and then stores a description of it
@@ -89,9 +89,10 @@ const BRIEF_TOOL = {
       one_liner: {
         type: "string",
         description:
-          "Exactly one sentence, under 30 words, saying what this actually " +
-          "argues, shows or offers. Not what it is 'about'. No preamble, no " +
-          "hedging, no second sentence.",
+          "Exactly one sentence, at most 22 words, saying what this actually " +
+          "argues, shows or offers. Not what it is 'about'. Punchy beats " +
+          "complete: cut qualifiers and subordinate clauses rather than " +
+          "packing the limit. No preamble, no hedging, no second sentence.",
       },
       question: {
         type: "string",
@@ -185,6 +186,51 @@ function extractPageText() {
   };
 }
 
+const ARXIV_PDF = /^https?:\/\/(?:www\.)?arxiv\.org\/pdf\/([^?#]+?)(?:v\d+)?(?:\.pdf)?$/i;
+
+/**
+ * Last resort for pages Chrome renders without a DOM we can walk. Only arXiv
+ * is handled, because it is the one case with a guaranteed text equivalent at
+ * a predictable URL. Other PDFs are still skipped.
+ */
+async function fallbackText(url) {
+  const match = url.match(ARXIV_PDF);
+  if (!match) return null;
+
+  const html = await fetch(`https://arxiv.org/abs/${match[1]}`).then((r) =>
+    r.ok ? r.text() : ""
+  );
+  if (!html) return null;
+
+  // No DOMParser in a service worker, so pull the meta tags arXiv always sets.
+  const meta = (name) =>
+    html.match(
+      new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']+)["']`, "i")
+    )?.[1];
+
+  const abstract = meta("citation_abstract") || meta("og:description");
+  const title = meta("citation_title") || meta("og:title") || "";
+  if (!abstract || abstract.length < MIN_CHARS) return null;
+
+  const text = decodeEntities(abstract);
+  return {
+    text,
+    title: decodeEntities(title),
+    words: text.split(/\s+/).length,
+    linkDensity: 0,
+    declaredArticle: true,
+  };
+}
+
+function decodeEntities(value) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
 async function readPage(tabId) {
   const [injection] = await chrome.scripting.executeScript({
     target: { tabId },
@@ -270,7 +316,10 @@ export async function sweepBriefs(cfg, apiKey, path) {
     }
 
     try {
-      const page = await readPage(tab.id);
+      let page = await readPage(tab.id);
+      if (page.text.length < MIN_CHARS) {
+        page = (await fallbackText(tab.url).catch(() => null)) ?? page;
+      }
       if (page.text.length < MIN_CHARS || page.words < MIN_WORDS) {
         // A login wall, an app shell, a blank new tab.
         await store(cfg, path, hash, { status: "skipped", reason: "too little text" });
