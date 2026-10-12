@@ -494,78 +494,57 @@ private fun CardFace(
             Spacer(Modifier.size(22.dp))
 
             Text(
-                tab.title,
-                style = MaterialTheme.typography.headlineSmall,
+                tab.brief?.shortTitle?.takeIf { it.isNotBlank() } ?: tab.title,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 32.sp,
-                maxLines = if (tab.brief == null) 7 else 3,
+                lineHeight = 38.sp,
+                maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
             )
 
             tab.brief?.let { brief ->
-                Spacer(Modifier.size(14.dp))
-                Text(
-                    brief.oneLiner,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 21.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                if (brief.keyPoints.isNotEmpty()) {
-                    Spacer(Modifier.size(16.dp))
-                    brief.keyPoints.take(3).forEach { point ->
-                        Row(Modifier.padding(bottom = 7.dp)) {
-                            Text(
-                                "—",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(Modifier.size(9.dp))
-                            Text(
-                                point,
-                                style = MaterialTheme.typography.bodySmall,
-                                lineHeight = 19.sp,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-
-                // The part that is actually hard to get anywhere else: something
-                // worth saying about the page, not a summary of it.
-                brief.questions.firstOrNull()?.let { question ->
-                    Spacer(Modifier.size(10.dp))
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(14.dp)
-                    ) {
-                        Column {
-                            Text(
-                                "WORTH RAISING",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp,
-                            )
-                            Spacer(Modifier.size(6.dp))
-                            Text(
-                                question,
-                                style = MaterialTheme.typography.bodySmall,
-                                lineHeight = 19.sp,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                if (brief.oneLiner.isNotBlank()) {
+                    Spacer(Modifier.size(18.dp))
+                    Text(
+                        brief.oneLiner,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 25.sp,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
             Spacer(Modifier.weight(1f))
+
+            tab.brief?.question?.takeIf { it.isNotBlank() }?.let { question ->
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(16.dp)
+                ) {
+                    Column {
+                        Text(
+                            "BEFORE YOU READ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            question,
+                            style = MaterialTheme.typography.bodyMedium,
+                            lineHeight = 22.sp,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Spacer(Modifier.size(14.dp))
+            }
 
             if (siblings > 0) {
                 Surface(

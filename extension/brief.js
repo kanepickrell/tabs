@@ -20,6 +20,9 @@ const PER_TICK = 2;
 const MIN_CHARS = 400;
 const MIN_WORDS = 250;
 
+// Bump when the brief shape changes; older briefs are then rewritten.
+const BRIEF_VERSION = 2;
+
 // Pages that are consoles, inboxes and account screens, not reading. Briefing
 // one sends your own dashboard to the API and then stores a description of it
 // in a database whose only credential is the space id. The first run of this
@@ -76,27 +79,28 @@ const BRIEF_TOOL = {
   input_schema: {
     type: "object",
     properties: {
+      short_title: {
+        type: "string",
+        description:
+          "A clean title of at most six words. Strip site names, section " +
+          "paths, file extensions and SEO padding. Say what the thing is, the " +
+          "way a person would name it out loud.",
+      },
       one_liner: {
         type: "string",
         description:
-          "One sentence on what this page actually is and who would want it. " +
-          "This is a triage line to help decide whether to spend the time - " +
-          "it is not a replacement for reading the page.",
+          "Exactly one sentence, under 30 words, saying what this actually " +
+          "argues, shows or offers. Not what it is 'about'. No preamble, no " +
+          "hedging, no second sentence.",
       },
-      key_points: {
-        type: "array",
-        items: { type: "string" },
+      question: {
+        type: "string",
         description:
-          "Three to five concrete takeaways. Prefer specific claims, numbers, " +
-          "names and findings over topic labels. Never write 'discusses X'.",
-      },
-      questions: {
-        type: "array",
-        items: { type: "string" },
-        description:
-          "Two or three genuinely interesting questions, tensions or angles " +
-          "this raises - the sort of thing worth saying to another person who " +
-          "knows the subject. Not comprehension questions, and not a quiz.",
+          "One thoughtful question to sit with before opening the page. It " +
+          "should sharpen attention or provoke a real opinion - a tension in " +
+          "the idea, a tradeoff worth having a view on, a comparison the page " +
+          "may dodge. Never a comprehension check, never answerable by the " +
+          "one-liner alone.",
       },
       reading_minutes: {
         type: "integer",
@@ -105,14 +109,14 @@ const BRIEF_TOOL = {
       is_worth_reading: {
         type: "boolean",
         description:
-          "True if the full page rewards reading beyond this brief. False for " +
-          "thin, duplicated, promotional or purely navigational pages.",
+          "True if the full page rewards reading. False for thin, duplicated, " +
+          "promotional or purely navigational pages.",
       },
     },
     required: [
+      "short_title",
       "one_liner",
-      "key_points",
-      "questions",
+      "question",
       "reading_minutes",
       "is_worth_reading",
     ],
@@ -120,18 +124,21 @@ const BRIEF_TOOL = {
   },
 };
 
-const SYSTEM = `You write briefs for someone triaging their own open browser tabs, so they can
-decide what to actually read instead of scrolling social media.
+const SYSTEM = `You write one-glance cards for someone triaging their own open browser tabs,
+so they can decide what to read instead of scrolling social media.
 
-Be concrete and specific. A brief that could have been written from the title
-alone is a failure. Prefer the real claim, number or finding over a description
-of the topic. Never pad, never hedge, and never say the page "explores" or
-"discusses" something.
+Three things only: a short title, one sentence, one question. Brevity is the
+whole point - this is read in two seconds on a phone, between other things.
 
-The questions matter most. Give the kind of observation that makes someone
-sound like they have actually thought about the subject - a tension in the
-argument, a surprising implication, a comparison the page misses. Avoid
-anything that reads like a reading-comprehension exercise.`;
+The sentence must be concrete. Give the actual claim, finding or offer. A
+sentence that could have been written from the title alone is a failure, and so
+is anything that says a page "explores", "discusses" or "dives into" a topic.
+
+The question is the part that matters. It should be worth turning over in your
+head on a walk, before the page is even open - a tension in the argument, a
+tradeoff the reader should have a view on, something the page will probably
+dodge. It must not be answerable from your own sentence, and it must never read
+like a reading-comprehension exercise.`;
 
 /**
  * Pulls the readable text out of a page.
@@ -232,8 +239,12 @@ async function askClaude(apiKey, { url, title, text }) {
  *               the storage layout
  */
 export async function sweepBriefs(cfg, apiKey, path) {
-  const existing = await fetch(path(cfg, "summaries")).then((r) => r.json());
-  const done = new Set(Object.keys(existing || {}));
+  const existing = (await fetch(path(cfg, "summaries")).then((r) => r.json())) || {};
+  const done = new Set(
+    Object.entries(existing)
+      .filter(([, record]) => record?.v === BRIEF_VERSION)
+      .map(([hash]) => hash)
+  );
   const { briefBlocklist = "" } = await chrome.storage.local.get("briefBlocklist");
   const extraHosts = briefBlocklist
     .split(/[\s,]+/)
@@ -295,7 +306,7 @@ async function store(cfg, path, hash, body) {
   await fetch(path(cfg, "summaries", hash), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ v: BRIEF_VERSION, ...body }),
   });
 }
 

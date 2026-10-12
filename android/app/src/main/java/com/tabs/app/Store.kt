@@ -33,11 +33,14 @@ private data class RemoteDevice(
 @Serializable
 private data class BriefRecord(
     val status: String = "",
+    val short_title: String = "",
     val one_liner: String = "",
-    val key_points: List<String> = emptyList(),
-    val questions: List<String> = emptyList(),
+    val question: String = "",
     val reading_minutes: Int = 0,
     val is_worth_reading: Boolean = true,
+    // v1 shape. Kept so briefs written before the schema change still render
+    // until the extension reissues them.
+    val questions: List<String> = emptyList(),
 )
 
 @Serializable
@@ -71,9 +74,9 @@ data class Tab(
 
 /** What Claude made of a page, written by the extension. */
 data class Brief(
+    val shortTitle: String,
     val oneLiner: String,
-    val keyPoints: List<String>,
-    val questions: List<String>,
+    val question: String,
     val readingMinutes: Int,
     val worthReading: Boolean,
 )
@@ -154,9 +157,11 @@ class Store(dbUrl: String, private val spaceId: String) {
                 .filterValues { it.status == "ok" && it.one_liner.isNotBlank() }
                 .mapValues { (_, record) ->
                     Brief(
+                        shortTitle = record.short_title,
                         oneLiner = record.one_liner,
-                        keyPoints = record.key_points,
-                        questions = record.questions,
+                        question = record.question.ifBlank {
+                            record.questions.firstOrNull().orEmpty()
+                        },
                         readingMinutes = record.reading_minutes,
                         worthReading = record.is_worth_reading,
                     )
